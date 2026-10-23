@@ -1173,8 +1173,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             settingsSubtitlesPending = trackPlan.subtitleSource == TrackSource.Settings &&
                 (trackPlan.subtitles is SubtitlePlan.On || trackPlan.subtitles is SubtitlePlan.IfForeignAudio)
             downmixChoice = runCatching { settings.downmixChoiceNow() }.getOrNull()
-            volumeBoostOn = runCatching { settings.volumeBoostNow() }.getOrDefault(false)
-            nightModeOn = runCatching { settings.nightModeNow() }.getOrDefault(false)
+            volumeBoostOn = true
+            nightModeOn = false
             skipSilence = runCatching { settings.skipSilenceNow() }.getOrDefault(false)
             subtitleStyle = runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle())
             applySubtitleStyle()
@@ -2183,7 +2183,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             .build()
 
         val plan = trackPlan
-        val subtitles = plan.subtitles
+        // Subtitles are not part of this build: no track is ever enabled, forced or not.
+        val subtitles = SubtitlePlan.Off(allowForced = false)
         val trackSelector = DefaultTrackSelector(this).apply {
             parameters = buildUponParameters()
                 // Off stays off, so a series watched without captions does not get them back on an
@@ -4380,15 +4381,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (FormFactor.isTv(this)) return
-        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
-        if (player?.isPlaying != true) return
-        if (cast?.casting == true) return
-        if (statusOverlay.visibility == View.VISIBLE) return
-        // From Android 12 the system enters on its own, through setAutoEnterEnabled, which is the
-        // smooth version of the same transition; asking again here would only race it.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) return
-        runCatching { enterPictureInPictureMode(pictureInPictureParams()) }
+        // No picture in picture in this build: leaving the player leaves it.
     }
 
     /** The overflow menu's and the row's picture in picture: straight into the corner. */

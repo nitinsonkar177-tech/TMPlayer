@@ -4,7 +4,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.sentry.android)
 }
 
 val localProps = Properties().apply {
@@ -106,11 +105,11 @@ android {
         // Donation links and the support card, all behind one switch (SupportReminder.enabled).
         // The `play` flavor planned in CP35 sets this to false: Play does not allow donation links
         // that bypass its billing.
-        buildConfigField("boolean", "SUPPORT_LINKS", "true")
+        buildConfigField("boolean", "SUPPORT_LINKS", "false")
 
         // The update check and the APK install that follows it, off in the F-Droid build (see
         // fdroidBuild above): F-Droid is what updates that build.
-        buildConfigField("boolean", "UPDATE_CHECK", "${!fdroidBuild}")
+        buildConfigField("boolean", "UPDATE_CHECK", "false")
 
         // English only. Every androidx and Media3 dependency ships translations for ~80
         // locales, and none of this app's own strings are translated, so the rest is dead
@@ -216,12 +215,12 @@ android {
     // `-PpromoShots` the real name, since the home screen channel shots carry it over the row.
     sourceSets.getByName("promo").res.directories += if (project.hasProperty("promoShots")) "src/promo/shots-label" else "src/promo/label"
 
-    if (fdroidBuild) {
+    if (true) {
         sourceSets.getByName("release").manifest.srcFile("src/fdroid/AndroidManifest.xml")
     }
     // Casting (CP73): Google's Cast framework behind CastBuild in the regular build, a stand-in
     // with no Google code in the F-Droid one. Every build type of one build gets the same side.
-    sourceSets.getByName("main").kotlin.directories += if (fdroidBuild) "src/nocast/java" else "src/cast/java"
+    sourceSets.getByName("main").kotlin.directories += "src/nocast/java"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -299,15 +298,8 @@ dependencies {
     // Casting to a Chromecast or Google TV (CP73), in every build but F-Droid's: see fdroidBuild.
     // Looked up by name rather than through the typed accessor, so a recipe that deletes the
     // library's line from the catalog (F-Droid's scanner reads it) still has a script that compiles.
-    if (!fdroidBuild) {
-        val catalog = project.extensions.getByType<VersionCatalogsExtension>().named("libs")
-        implementation(catalog.findLibrary("play-services-cast-framework").get())
-        implementation(libs.androidx.mediarouter)
-    }
 
-    // Crash reporting, off unless the viewer turns it on in Settings. Nothing here runs at
-    // startup: auto-init is switched off in the manifest and CrashReports does the rest.
-    implementation(libs.sentry.android.core)
+
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -318,35 +310,3 @@ dependencies {
     testImplementation(libs.json)
 }
 
-// The R8 mapping for crash reports, and nothing else of Sentry's plugin. A release build is
-// minified, so without its mapping a report's stack trace is a list of renamed classes. The
-// plugin writes a UUID into the APK and the matching mapping is uploaded under it, but only when
-// SENTRY_AUTH_TOKEN is set (the release workflow, or a local `export`): any other build, a fork's
-// included, uploads nothing and needs no account. No SDK is added (the app picks its own, core
-// only), no code is instrumented, and the plugin sends no telemetry of its own.
-sentry {
-    org.set(System.getenv("SENTRY_ORG") ?: "nevil-i0")
-    // The project is the DSN's last path segment, its numeric id, which sentry-cli takes as well
-    // as a slug, so nothing but the DSN has to be configured.
-    val dsn = localProps.getProperty("SENTRY_DSN") ?: System.getenv("SENTRY_DSN") ?: ""
-    projectName.set(System.getenv("SENTRY_PROJECT") ?: dsn.substringAfterLast('/', ""))
-    authToken.set(System.getenv("SENTRY_AUTH_TOKEN") ?: "")
-    val upload = !System.getenv("SENTRY_AUTH_TOKEN").isNullOrBlank() && dsn.isNotBlank()
-
-    includeProguardMapping.set(true)
-    autoUploadProguardMapping.set(upload)
-    uploadNativeSymbols.set(false)
-    includeNativeSources.set(false)
-    includeSourceContext.set(false)
-    includeDependenciesReport.set(false)
-    telemetry.set(false)
-    // Release only: the debug and promo builds are not minified, and never report anything.
-    ignoredVariants.set(listOf("debug", "promoDebug", "promoRelease", "promo"))
-
-    tracingInstrumentation {
-        enabled.set(false)
-    }
-    autoInstallation {
-        enabled.set(false)
-    }
-}
