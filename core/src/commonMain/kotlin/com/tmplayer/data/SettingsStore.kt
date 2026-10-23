@@ -1322,7 +1322,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
         holdSpeed = TouchPrefs.sanitiseHold(prefs[HOLD_SPEED]),
         controlsTimeoutMs = TouchPrefs.sanitiseTimeout(prefs[CONTROLS_TIMEOUT_MS]),
         seekGesture = prefs[GESTURE_SEEK] ?: true,
-        brightnessGesture = prefs[GESTURE_BRIGHTNESS] ?: true,
+        brightnessGesture = prefs[GESTURE_BRIGHTNESS] ?: false,
         volumeGesture = prefs[GESTURE_VOLUME] ?: true,
         haptics = prefs[PLAYER_HAPTICS] ?: true,
         showRemaining = prefs[SHOW_REMAINING] ?: false,

@@ -19,7 +19,7 @@ data class TouchPrefs(
     /** How long the controls stay up while playing; zero keeps them up until tapped away. */
     val controlsTimeoutMs: Long = TIMEOUT_DEFAULT_MS,
     val seekGesture: Boolean = true,
-    val brightnessGesture: Boolean = true,
+    val brightnessGesture: Boolean = false,
     val volumeGesture: Boolean = true,
     val haptics: Boolean = true,
     /** The total on the times line reads as the time left instead. */

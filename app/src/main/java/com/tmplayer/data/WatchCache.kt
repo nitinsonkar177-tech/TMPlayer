@@ -21,7 +21,7 @@ object WatchCache {
      * The one set of rules for the process, built on first use.
      *
      * One instance, because the claim lock and the claims in flight have to be shared by every
-     * caller to mean anything. The phone and the TV keep one cached video ([CacheRule.OneVideo]),
+     * caller to mean anything. The phone and the TV keep their playback cache under 40 MB,
      * and eviction does not look at [playing]: it never has here, and the claim of the video now
      * playing is what spares it.
      */
@@ -34,7 +34,11 @@ object WatchCache {
                 settings = SettingsStore(app),
                 filesRoot = { AndroidPaths.cacheDir(app) },
                 playing = ::playingNow,
-                rule = { CacheRule.OneVideo },
+                // Lite: the temporary playback cache targets 40 MB. Anything cached beyond that
+                // (older played videos, least recently played first) is swept automatically on
+                // launch and when a video closes; the video playing now, downloads and in-flight
+                // fetches are always spared. Streaming itself is untouched.
+                rule = { CacheRule.UnderCap(40L * 1024 * 1024) },
                 sparePlaying = false,
             )
         }.also { rules = it }

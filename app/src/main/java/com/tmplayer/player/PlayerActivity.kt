@@ -815,6 +815,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // On a television too: the controls timeout and the remaining time readout apply there.
         lifecycleScope.launch {
             touchPrefs = runCatching { settings.touchPrefsNow() }.getOrDefault(TouchPrefs())
+            // Lite: playback runs at full brightness (the gesture and every other brightness
+            // control are gone), as far as the device allows.
+            window.attributes = window.attributes.apply {
+                screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+            }
+
             applyTouchPrefs()
         }
         renderControlsTitle()
