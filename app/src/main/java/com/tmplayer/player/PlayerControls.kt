@@ -62,7 +62,6 @@ class PlayerControls(
     private val onVisibility: (Boolean) -> Unit,
     private val onTogglePlay: () -> Unit,
     private val onPickAudio: () -> Unit,
-    private val onPickSpeed: () -> Unit,
     private val onPlayEpisode: (MediaItem) -> Unit,
     /** The phone's top bar back arrow, and the overflow (the phone's top bar, the end of the television's row). */
     private val onBack: () -> Unit = {},
@@ -233,7 +232,6 @@ class PlayerControls(
 
     init {
         wire(root.findViewById(R.id.control_audio)) { onPickAudio() }
-        wire(root.findViewById(R.id.control_speed)) { onPickSpeed() }
         wire(shapeButton) { onCycleShape() }
         wire(episodesButton) { onEpisodes() }
         wire(copyButton) { onCopies() }
@@ -611,7 +609,6 @@ class PlayerControls(
         // Episodes are words already.
         tipOnFocus(
             root.findViewById(R.id.control_audio),
-            root.findViewById(R.id.control_speed),
             shapeButton,
             centerPlay,
         )
@@ -645,7 +642,6 @@ class PlayerControls(
             R.id.center_next to L.playerNextEpisode,
             R.id.times_duration to L.playerShowTimeRemaining,
             R.id.control_audio to L.playerAudio,
-            R.id.control_speed to L.playerPlaybackSpeed,
             R.id.control_episodes to L.episodesTitle,
             R.id.control_copy to L.playerCopies,
         )

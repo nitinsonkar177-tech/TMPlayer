@@ -429,19 +429,6 @@
                         android:src="@drawable/ic_audio_language"
                         android:tint="@color/player_control_icon" />
 
-                    <ImageButton
-                        android:id="@+id/control_speed"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Playback speed"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_speed"
-                        android:tint="@color/player_control_icon" />
-
                     <!-- Picture shape: Fit, Crop, Stretch, a press each, the glyph showing the
                          one in force. On both devices: on a television it was a page inside More,
                          three presses and a list for the one control a sofa reaches for when a

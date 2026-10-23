@@ -473,7 +473,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** How the picture is fitted to the screen, and the speed it plays at. Both are remembered. */
     private var videoScale = VideoScale.Fit
-    private var playbackSpeed = PlaybackSpeed.DEFAULT
+    private val playbackSpeed = PlaybackSpeed.DEFAULT
 
     /**
      * The soundtrack and subtitles this series was last watched with, read before the player is
@@ -747,7 +747,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             onVisibility = ::onControlsVisibilityChanged,
             onTogglePlay = ::togglePlayback,
             onPickAudio = { showTrackPicker(C.TRACK_TYPE_AUDIO) },
-            onPickSpeed = ::pickSpeed,
             onPlayEpisode = ::playEpisode,
             onEpisodes = ::openEpisodes,
             onCopies = ::openCopies,
@@ -1104,9 +1103,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             } else {
                 null
             }
-            // Its own speed, else the series' or course's, else the chat's or topic's: [SpeedMemory].
-            playbackSpeed = runCatching { settings.openingSpeed(resumed?.speed, speedScopes) }
-                .getOrDefault(resumed?.speed?.let(PlaybackSpeed::sanitise) ?: PlaybackSpeed.DEFAULT)
             resumeTracks = resumed
             videoScale = runCatching { VideoScale.from(settings.videoScaleNow()) }
                 .getOrDefault(VideoScale.Fit)
@@ -1223,7 +1219,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 positionMs = { player?.currentPosition ?: 0L },
                 durationMs = { player?.duration?.takeIf { it > 0 } ?: 0L },
                 onSeekTo = { at -> player?.seekTo(at) },
-                onHold = ::holdFastForward,
                 onTapControls = ::toggleControls,
                 onTogglePlay = ::togglePlaybackFromPicture,
                 isOnChrome = { x, y ->
@@ -1731,26 +1726,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
-     * Runs the video fast for as long as a finger is held on it, then puts it back.
-     *
-     * It returns to the speed the viewer chose, not 1x: somebody watching at 1.5x who holds to skip
-     * an aside expects to be back at 1.5x when they let go.
-     */
-    private fun holdFastForward(holding: Boolean) {
-        val exo = player ?: return
-        if (holding) {
-            val speed = touchPrefs.holdSpeed.takeIf { it > 0f } ?: TouchPrefs.HOLD_DEFAULT
-            exo.setPlaybackSpeed(speed)
-            // The picture is what the viewer is skimming; the row would only be in the way.
-            controls?.hideAnimated()
-            feedback?.holdStarted(speed)
-        } else {
-            exo.setPlaybackSpeed(playbackSpeed)
-            feedback?.holdEnded()
-        }
-    }
-
-    /**
      * Asks the system for the orientation this player is set to, and remembers it for the session.
      *
      * Called before the content view on the way in, so the window opens the right way up rather
@@ -1853,11 +1828,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         controls?.setShape(scale, animate = true)
         showGestureFeedback(scale.label)
         lifecycleScope.launch { runCatching { settings.setVideoScale(scale.name) } }
-    }
-
-    /** The speed button: every speed to pick from at once, rather than stepping through them. */
-    fun pickSpeed() {
-        showSheet { it.showSpeed(playbackSpeed, ::setSpeed, skipSilence, ::setSkipSilence) }
     }
 
     /** The speed sheet's Skip silence: on the sound already playing, and kept for every video. */
@@ -4792,15 +4762,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         )
     }
 
-    private fun setSpeed(value: Float) {
-        playbackSpeed = value
-        player?.setPlaybackSpeed(value)
-        showGestureFeedback(PlaybackSpeed.label(value))
-        // For the series, the course, the chat or the topic, not only this file: 1x forgets it.
-        val scopes = speedScopes
-        val store = settings
-        App.backgroundScope.launch { runCatching { store.rememberSpeed(scopes, value) } }
-    }
+
 
     /**
      * The phone's way back to the start of a video that opened where it was left: a line over the
