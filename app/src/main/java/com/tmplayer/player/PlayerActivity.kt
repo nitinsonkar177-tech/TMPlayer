@@ -746,7 +746,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             player = { player },
             onVisibility = ::onControlsVisibilityChanged,
             onTogglePlay = ::togglePlayback,
-            onPickAudio = { showTrackPicker(C.TRACK_TYPE_AUDIO) },
+            onPickAudio = ::showTrackPicker,
             onPlayEpisode = ::playEpisode,
             onEpisodes = ::openEpisodes,
             onCopies = ::openCopies,
@@ -3636,15 +3636,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
     }
 
-    override fun subtitleStyleNow(): SubtitleStyle = subtitleStyle
-
-    /** Applies [style] to the subtitles on screen at once, and keeps it for every video after. */
-    override fun changeSubtitleStyle(style: SubtitleStyle) {
-        subtitleStyle = style
-        applySubtitleStyle()
-        lifecycleScope.launch { runCatching { settings.setSubtitleStyle(style) } }
-    }
-
     /**
      * How much larger than its share of the picture subtitle text is drawn, for a small picture.
      *
@@ -3714,44 +3705,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         )
     }
 
-    /**
-     * This video for an online subtitle search: its name, its size, the subtitle language last
-     * chosen for the series, and the OpenSubtitles hash when both ends of the file are on the disk
-     * (always for a download; for a stream, once TDLib has fetched them).
-     */
-    override suspend fun onlineTarget(): SubtitleTarget? {
-        if (mediaTitle.isBlank()) return null
-        val local = downloadedFile
-        val id = fileId
-        val size = fileSizeBytes
-        val hash = withContext(Dispatchers.IO) {
-            runCatching {
-                when {
-                    // The hash is of the whole file's two ends, which for a joined video are two pieces.
-                    joinedSource != null -> null
-                    local != null -> MovieHash.of(local)
-                    id != 0 -> withTimeoutOrNull(3_000) {
-                        OnlineSubtitles.hashFromTdlib(Td.awaitConnectedSession().client, id, size)
-                    }
-                    else -> null
-                }
-            }.getOrNull()
-        }
-        return SubtitleTarget(
-            fileName = mediaTitle,
-            sizeBytes = size,
-            hash = hash,
-            languages = OnlineSubtitles.languagesFor(tracks.textLanguage),
-        )
-    }
-
-    override fun attachOnlineSubtitle(file: File, label: String) = subtitleFiles.attachFile(file, label)
-
-    override val pickSubtitleFile: (() -> Unit)?
-        get() = if (FormFactor.isTv(this)) null else ({ subtitleFiles.pick() })
-
-    fun showTrackPicker(trackType: Int) {
-        TrackPickerFragment.show(supportFragmentManager, R.id.overlay_container, trackType)
+    fun showTrackPicker() {
+        TrackPickerFragment.show(supportFragmentManager, R.id.overlay_container)
     }
 
     /**
