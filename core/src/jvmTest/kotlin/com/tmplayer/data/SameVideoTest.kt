@@ -280,8 +280,8 @@ class SameVideoTest {
             (System.nanoTime() - start) / 1_000_000
         }
         println("arranging 2000 files: $ms ms")
-        // Lite: upstream pinned 200 ms; shared CI runners need more headroom for the same work.
-        assertTrue("arranging 2000 files took $ms ms", ms < 1000)
+        // Lite: upstream's own threshold kept, so baseline and modified runs compare exactly.
+        assertTrue("arranging 2000 files took $ms ms", ms < 200)
     }
 
     private companion object {

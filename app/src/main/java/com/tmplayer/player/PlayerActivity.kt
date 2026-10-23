@@ -356,10 +356,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /**
      * True while "Still watching?" is up. Playback is stopped under it and so are the downloads,
-     * and [downloadsHeldForTheCard] are the queued ones it paused, to carry on when somebody answers.
      */
-    private var stillWatchingUp = false
-    private var downloadsHeldForTheCard: List<Int> = emptyList()
 
     /**
      * Which way up the picture is held, and whether the viewer has said so themselves.
@@ -791,7 +788,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         )
         buildNextUpCard()
         startTrickplay()
-        startStillWatchingCounts()
         // Followed rather than read once, so turning it on in Settings with a video open applies
         // the next time the player is left. A phone's setting: a television never plays on unseen.
         if (!FormFactor.isTv(this)) {
@@ -1348,7 +1344,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * leaves it up for the disc to turn and then lets it go, sooner when it was down before.
      */
     private fun onPauseChanged(playWhenReady: Boolean, reason: Int) {
-        val quiet = statusOverlay.visibility == View.VISIBLE || inPictureInPicture || stillWatchingUp
+        val quiet = statusOverlay.visibility == View.VISIBLE || inPictureInPicture
         if (!playWhenReady) {
             if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) return
             if (!pauseNoted) rowDownBeforePause = !controlsUp
@@ -2585,13 +2581,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             loopHandler.removeCallbacks(loopWatch)
             if (isPlaying && abLoop?.complete == true) loopHandler.post(loopWatch)
-            // Started again from outside the card (a headset, the notification): the question
-            // has been answered.
-            if (isPlaying && stillWatchingUp) {
-                stillWatchingUp = false
-                resumeHeldDownloads()
-                hideStatus()
-            }
             // A long download before the first frame is still the viewer waiting on this screen,
             // so the loading sheet counts as something worth staying awake for.
             keepScreenOn(isPlaying || openingFilm)
@@ -3478,7 +3467,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val stranded = !handingOver && isTaskRoot && !isChangingConfigurations &&
             intent.getBooleanExtra(EXTRA_OUTSIDE_APP_TASK, false)
         // Leaving from "Still watching?" is an answer too: somebody pressed Back.
-        resumeHeldDownloads()
         super.finish()
         if (stranded) {
             runCatching {
@@ -3515,7 +3503,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 autoplay = autoplay,
                 nextUpDismissed = nextUpDismissed,
                 sleepAtTheEnd = false,
-                askBeforeAutoplay = StillWatching.askBeforeAutoplay(autoplayedInARow),
+                askBeforeAutoplay = false,
                 nextUpShown = nextUpShown,
                 unseen = unseen,
             )
@@ -3524,10 +3512,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     showFinished()
                     return@launch
                 }
-                BackgroundPlayback.AtTheEnd.AskFirst -> {
-                    askStillWatching(L.playerStillWatchingAutoplay(StillWatching.AUTOPLAY_LIMIT), next)
-                    return@launch
-                }
+                // Lite: never reached - askBeforeAutoplay is always false (no "Still watching?"
+                // card). Kept so the when stays exhaustive over the shared core type.
+                BackgroundPlayback.AtTheEnd.AskFirst -> Unit
                 is BackgroundPlayback.AtTheEnd.Next -> Unit
             }
             next ?: return@launch
@@ -3565,21 +3552,18 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         autoplay = autoplayNext,
         nextUpDismissed = nextUpDismissed,
         sleepAtTheEnd = false,
-        askBeforeAutoplay = StillWatching.askBeforeAutoplay(autoplayedInARow),
+        askBeforeAutoplay = false,
         nextUpShown = nextUpShown,
         unseen = true,
     ) is BackgroundPlayback.AtTheEnd.Next
 
-    /** [playEpisode] for an episode nobody asked for, counted towards "Still watching?". */
+    /** [playEpisode] for an episode nobody asked for. */
     private fun autoplay(next: MediaItem) {
-        autoplayedInARow++
-        // Out of sight no new activity may start, so the episode plays in this one; the count
-        // carries on in it as it would across activities.
+        // Out of sight no new activity may start, so the episode plays in this one.
         if (inBackgroundAudio) {
             continueUnseen(next)
             return
         }
-        openedByAutoplay = true
         playEpisode(next)
     }
 
@@ -4538,115 +4522,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
-     * Starts or carries on the counts "Still watching?" keeps, and looks at them every
-     * [STILL_WATCHING_TICK_MS]: the sleep timer running out, and two hours of playback without a
-     * press. Not tied to the started state, since picture in picture stops the activity while the
-     * video carries on, and that is exactly when nobody may be watching.
-     */
-    private fun startStillWatchingCounts() {
-        if (!openedByAutoplay) {
-            autoplayedInARow = 0
-            lastInputAt = SystemClock.elapsedRealtime()
-        }
-        openedByAutoplay = false
-        if (lastInputAt == 0L) lastInputAt = SystemClock.elapsedRealtime()
-        lifecycleScope.launch {
-            while (true) {
-                delay(STILL_WATCHING_TICK_MS)
-                if (stillWatchingUp) continue
-                val exo = player ?: continue
-                val now = SystemClock.elapsedRealtime()
-                if (exo.isPlaying && StillWatching.askAfterIdle(now - lastInputAt)) {
-                    askStillWatching(L.playerStillWatchingIdle, next = null)
-                }
-            }
-        }
-    }
-
-    /** Any key or touch is somebody watching. */
-    override fun onUserInteraction() {
-        super.onUserInteraction()
-        lastInputAt = SystemClock.elapsedRealtime()
-        autoplayedInARow = 0
-    }
-
-    /**
-     * "Still watching?": the whole screen, with playback stopped and every download held.
-     *
-     * The player is stopped rather than paused, which closes the stream: a paused player keeps
-     * reading ahead, and TDLib keeps fetching for it. Keep watching prepares it again where it
-     * was. [next] is the episode autoplay was about to start, which Keep watching starts instead.
-     */
-    private fun askStillWatching(why: String, next: MediaItem?) {
-        // Its buttons have to be reachable, and the video is stopping anyway: hours without a
-        // touch or a key, or a sleep timer running out, is nobody there for the lock to keep out.
-        stillWatchingUp = true
-        hideNextUp()
-        controls?.hideAnimated()
-        player?.let {
-            it.pause()
-            it.stop()
-        }
-        // Not [stopDownload], which leaves alone a file this player is still holding, as it is here.
-        val id = fileId
-        if (!downloadComplete && id > 0 && !OfflineDownloads.isDownloading(id)) {
-            App.backgroundScope.launch { runCatching { Td.cancelDownload(id) } }
-        }
-        downloadsHeldForTheCard = OfflineDownloads.active.value.values.filter { it.busy }.map { it.fileId }
-        if (downloadsHeldForTheCard.isNotEmpty()) OfflineDownloads.pauseAll(this)
-
-        keepScreenOn(false)
-        statusOverlay.visibility = View.VISIBLE
-        statusIcon.visibility = View.GONE
-        rebufferChip.visibility = View.GONE
-        feedback?.buffering(false)
-        statusSpinner?.visibility = View.GONE
-        statusProgress.visibility = View.GONE
-        hideFailureActions()
-        layOutSheetForThisScreen()
-        statusTitle.text = L.playerStillWatching
-        statusText.text = why
-        statusDetail.visibility = View.VISIBLE
-        statusDetail.text = next?.let { L.playerNextTitle(com.tmplayer.data.SeriesShelf.tileTitle(it)) } ?: L.playerStillWatchingPaused
-        statusBack?.visibility = View.VISIBLE
-        statusRetry?.apply {
-            text = L.playerKeepWatching
-            visibility = View.VISIBLE
-            setOnClickListener {
-                text = L.commonTryAgain
-                setOnClickListener { retryPlayback() }
-                keepWatching(next)
-            }
-            requestFocus()
-        }
-        updateDownloadChip()
-    }
-
-    private fun keepWatching(next: MediaItem?) {
-        stillWatchingUp = false
-        resumeHeldDownloads()
-        if (next != null) {
-            playEpisode(next)
-            return
-        }
-        hideStatus()
-        val exo = player ?: return
-        if (exo.playbackState == Player.STATE_IDLE) exo.prepare()
-        exo.play()
-        keepScreenOn(true)
-    }
-
-    /**
-     * Lets the queued downloads "Still watching?" paused carry on. Any answer counts, not only Keep
-     * watching: play from a headset, and Back or Go back, which otherwise left them paused in
-     * Downloads with nothing to say why.
-     */
-    private fun resumeHeldDownloads() {
-        downloadsHeldForTheCard.forEach { OfflineDownloads.resume(this, it) }
-        downloadsHeldForTheCard = emptyList()
-    }
-
-    /**
      * Whether Save to Downloads means anything for this video: not one that is a download already,
      * not one the queue has, and not one with no message to download it from again.
      */
@@ -4810,7 +4685,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     if (duration <= 0 || nextUpDismissed || inPictureInPicture) continue
                     // Autoplay is going to stop and ask: nothing is starting in thirty seconds,
                     // so nothing says it is.
-                    if (StillWatching.askBeforeAutoplay(autoplayedInARow)) continue
                     val position = exo.currentPosition
                     val left = duration - position
                     val credits = SkipSegments.creditsStart(skipSegments, duration)
@@ -6256,7 +6130,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         private const val SKIP_TIMES_WAIT_MS = 20_000L
 
         /** How often the sleep timer and the idle count are looked at. */
-        private const val STILL_WATCHING_TICK_MS = 5_000L
 
         /** The smallest picture height, as a share of the screen's short side, subtitles are sized for. */
         private const val UPRIGHT_TEXT_SHARE = 0.6f
@@ -6376,17 +6249,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
          */
         private var lastOrientation = ScreenOrientation.DEFAULT
 
-        /**
-         * What "Still watching?" counts, for the length of the process: autoplay starts a new
-         * activity per episode, and a count that began again with each one would never reach the
-         * limit. [openedByAutoplay] tells the next activity it is one of those hops; any other way
-         * into the player is somebody choosing a video, which starts both counts again.
-         */
-        private var autoplayedInARow = 0
-        private var lastInputAt = 0L
-        private var openedByAutoplay = false
-
-        /**
+            /**
          * The lock read back off disk at startup, so it survives more than one process.
          *
          * Set from the application rather than read here, because the orientation has to be applied
