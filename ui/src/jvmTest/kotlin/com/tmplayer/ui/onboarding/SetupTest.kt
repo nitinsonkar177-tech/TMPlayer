@@ -225,7 +225,7 @@ class SetupTest {
         assertEquals("", choices.first().tag)
         assertNull(choices.first().name)
         assertEquals(Languages.all.map { it.tag }, choices.drop(1).map { it.tag })
-        assertEquals("Español (Latinoamérica)", choices.first { it.tag == "es-419" }.name)
+        assertEquals("English", choices.first { it.tag == "en" }.name)
     }
 
     private fun store(): SettingsStore {
