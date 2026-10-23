@@ -1117,12 +1117,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 .getOrDefault(TrackChoice())
             val trackPrefs = runCatching { settings.trackPreferencesNow() }.getOrDefault(TrackPreferences())
             trackPlan = TrackRules.plan(resumed, tracks, trackPrefs, Translator.messages.tag)
-            // Lite: Hindi first. A video with a Hindi soundtrack opens in Hindi; one without
-            // falls back to the file's own default. A language the viewer picked for this series
-            // (or a resume's track) still wins.
-            if (trackPlan.audioLanguage == null) {
-                trackPlan = trackPlan.copy(audioLanguage = "hi")
-            }
+            // Lite: Hindi first on EVERY video. A video with a Hindi soundtrack always opens
+            // in Hindi; one without falls back to the file's own default. Neither a series
+            // memory nor a resume's saved track overrides this; a language the viewer picks
+            // from the audio sheet while watching still stands until they leave.
+            trackPlan = trackPlan.copy(audioLanguage = "hi")
             settingsSubtitlesPending = trackPlan.subtitleSource == TrackSource.Settings &&
                 (trackPlan.subtitles is SubtitlePlan.On || trackPlan.subtitles is SubtitlePlan.IfForeignAudio)
             downmixChoice = runCatching { settings.downmixChoiceNow() }.getOrNull()
@@ -2154,7 +2153,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 // with the captions episode one ended in; else the language Settings ask for.
                 .setPreferredTextLanguage((subtitles as? SubtitlePlan.On)?.language)
                 .setSelectUndeterminedTextLanguage(false)
-                .setPreferredAudioLanguage(plan.audioLanguage)
+                // Lite: Hindi first, matched by its ISO 639-1 and 639-2 tags ("hi", "hin").
+                .setPreferredAudioLanguages("hi", "hin")
                 .build()
         }
 
@@ -2811,11 +2811,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             textLanguage = language(C.TRACK_TYPE_TEXT) ?: tracks.textLanguage.takeIf { subtitlesOn },
             subtitlesOn = subtitlesOn,
         )
+        // Lite: the choice is not saved. Hindi-first wins again on the next video, and a
+        // remembered language would override it.
         if (updated == tracks) return
         tracks = updated
-        val key = seriesKey
-        val store = settings
-        App.backgroundScope.launch { runCatching { store.setTrackChoice(key, updated) } }
     }
 
     /**
