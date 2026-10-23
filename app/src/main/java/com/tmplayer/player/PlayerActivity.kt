@@ -1117,6 +1117,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 .getOrDefault(TrackChoice())
             val trackPrefs = runCatching { settings.trackPreferencesNow() }.getOrDefault(TrackPreferences())
             trackPlan = TrackRules.plan(resumed, tracks, trackPrefs, Translator.messages.tag)
+            // Lite: Hindi first. A video with a Hindi soundtrack opens in Hindi; one without
+            // falls back to the file's own default. A language the viewer picked for this series
+            // (or a resume's track) still wins.
+            if (trackPlan.audioLanguage == null) {
+                trackPlan = trackPlan.copy(audioLanguage = "hi")
+            }
             settingsSubtitlesPending = trackPlan.subtitleSource == TrackSource.Settings &&
                 (trackPlan.subtitles is SubtitlePlan.On || trackPlan.subtitles is SubtitlePlan.IfForeignAudio)
             downmixChoice = runCatching { settings.downmixChoiceNow() }.getOrNull()
