@@ -18,26 +18,6 @@ object Languages {
 
     val all: List<AppLanguage> = listOf(
         AppLanguage("en", "English"),
-        AppLanguage("es-419", "Español (Latinoamérica)"),
-        AppLanguage("pt-BR", "Português (Brasil)"),
-        AppLanguage("fr", "Français"),
-        AppLanguage("de", "Deutsch"),
-        AppLanguage("it", "Italiano"),
-        AppLanguage("pl", "Polski"),
-        AppLanguage("ru", "Русский"),
-        AppLanguage("uk", "Українська"),
-        AppLanguage("tr", "Türkçe"),
-        AppLanguage("id", "Bahasa Indonesia"),
-        AppLanguage("vi", "Tiếng Việt"),
-        AppLanguage("ar", "العربية", rtl = true),
-        AppLanguage("fa", "فارسی", rtl = true),
-        AppLanguage("zh-CN", "简体中文"),
-        AppLanguage("zh-TW", "繁體中文"),
-        AppLanguage("ja", "日本語"),
-        AppLanguage("ko", "한국어"),
-        AppLanguage("hi", "हिन्दी"),
-        AppLanguage("bn", "বাংলা"),
-        AppLanguage("ml", "മലയാളം"),
     )
 
     val tags: List<String> = all.map { it.tag }
@@ -64,29 +44,10 @@ object Languages {
         return ENGLISH
     }
 
-    /** The shipped tag for one system tag, or null when none fits. */
+    /** The shipped tag for one system tag: English, or null for anything else. */
     fun match(systemTag: String): String? {
-        val parts = normalise(systemTag).split('-')
-        val language = parts.first().lowercase()
-        val rest = parts.drop(1)
-        val script = rest.firstOrNull { it.length == 4 }?.lowercase()
-        val region = rest.firstOrNull { it.length == 2 || (it.length == 3 && it.all(Char::isDigit)) }?.uppercase()
-        return when (language) {
-            // Spanish everywhere gets the Latin American catalog, Portuguese the Brazilian one:
-            // the only ones there are, and far closer than English.
-            "es" -> "es-419"
-            "pt" -> "pt-BR"
-            // Simplified for the mainland and the diaspora that writes it, Traditional for Taiwan,
-            // Hong Kong and Macau. A bare `zh` is Simplified, the larger readership.
-            "zh" -> when {
-                script == "hans" -> "zh-CN"
-                script == "hant" -> "zh-TW"
-                region == null || region in setOf("CN", "SG", "MY") -> "zh-CN"
-                region in setOf("TW", "HK", "MO") -> "zh-TW"
-                else -> null
-            }
-            else -> all.firstOrNull { it.tag == language }?.tag
-        }
+        val language = normalise(systemTag).split('-').first().lowercase()
+        return if (language == "en") ENGLISH else null
     }
 
     /** Underscores to hyphens and Android's legacy codes to today's (`in` to `id`). */

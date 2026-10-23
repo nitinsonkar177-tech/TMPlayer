@@ -156,9 +156,6 @@ class TranslatorTest {
         val empty = Translator.load("xx-empty")
         assertEquals("xx-empty", empty.tag)
         assertEquals(Translator.english().commonRetry, empty.commonRetry)
-        // The shipped catalogs are translated.
-        assertNotEquals(Translator.english().commonRetry, Translator.load("es-419").commonRetry)
-        assertNotEquals(Translator.english().commonRetry, Translator.load("ar").commonRetry)
     }
 
     @Test
@@ -172,33 +169,19 @@ class TranslatorTest {
     }
 
     @Test
-    fun `select switches the active language and the flow follows`() {
+    fun `select stays on english, whatever the device says`() {
         assertEquals("en", Translator.messages.tag)
-        assertEquals("es-419", Translator.select("", listOf("es-CL")))
-        assertEquals("es-419", Translator.active.value.tag)
-        assertEquals("es-419", L.messages.tag)
-        assertEquals("en", Translator.select("en", listOf("es-CL")))
+        assertEquals("en", Translator.select("", listOf("es-CL")))
+        assertEquals("en", Translator.active.value.tag)
         assertEquals("en", L.messages.tag)
     }
 
     @Test
-    fun `system default names the device's language, not the one picked`() {
-        // The picker's "System default" row read Arabic while Arabic was picked, and after
-        // switching back, because it asked the process locale, which Android rewrites.
-        Translator.select("ar", listOf("es-CL", "en-GB"))
-        assertEquals("ar", Translator.messages.tag)
-        assertEquals("es-419", Translator.systemDefault())
+    fun `system default is english, whatever the device says`() {
         Translator.select("", listOf("es-CL", "en-GB"))
-        assertEquals("es-419", Translator.systemDefault())
-        // Nothing the app ships: English, as the app itself would show.
-        Translator.select("ar", listOf("xx-YY"))
+        assertEquals("en", Translator.systemDefault())
+        Translator.select("", listOf("xx-YY"))
         assertEquals("en", Translator.systemDefault(fallback = listOf("ar")))
-    }
-
-    @Test
-    fun `system default falls back before the first select`() {
-        Translator.select("ar", emptyList())
-        assertEquals("es-419", Translator.systemDefault(fallback = listOf("es-MX")))
     }
 
     @Test

@@ -420,7 +420,7 @@ class PlayerExtrasRenderTest {
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-night-xhdpi")
     fun rowTelevisionOnShape() {
-        val controls = row(tv = true, name = "extras-row-tv-shape.png", focus = R.id.control_shape, shape = VideoScale.Stretch)
+        val controls = row(tv = true, name = "extras-row-tv-shape.png", focus = R.id.control_shape, shape = VideoScale.Crop)
         assertTrue(controls.shapeOnRow)
         assertTrue("the television keeps its lock in More", !controls.lockOnRow)
     }

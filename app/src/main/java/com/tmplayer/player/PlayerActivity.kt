@@ -552,28 +552,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var touchPrefs = TouchPrefs()
 
     /**
-     * True while the screen is locked: every touch, click, wheel and key is off but the volume
-     * ([LockedKeys]), the orientation is frozen, and the only thing a tap, a mouse move or a key
-     * does is offer the way out: the pill on a touch screen, a held OK on a remote.
-     */
-    private var locked = false
-    private var lockShield: FrameLayout? = null
-    private var unlockPill: View? = null
-    private var unlockText: TextView? = null
-    private var unlockProgress: android.widget.ProgressBar? = null
-
-    /** The select key being held toward an unlock, or 0. */
-    private var unlockHeldKey = 0
-
-    /** When the screen was locked, on the key events' clock: only a key pressed after it unlocks. */
-    private var lockedAt = 0L
-    private val hideUnlockPill = Runnable { unlockPill?.animate()?.alpha(0f)?.setDuration(300)?.start() }
-    private val unlockAfterHold = Runnable {
-        unlockHeldKey = 0
-        unlockScreen()
-    }
-
-    /**
      * The "Next episode in 30" card, raised near the end of an episode with a successor. Once it
      * has been seen the end of the video goes straight to the next one; once it has been hidden the
      * end of the video stays put.
@@ -768,16 +746,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             player = { player },
             onVisibility = ::onControlsVisibilityChanged,
             onTogglePlay = ::togglePlayback,
-            onPickSubtitles = { showTrackPicker(C.TRACK_TYPE_TEXT) },
             onPickAudio = { showTrackPicker(C.TRACK_TYPE_AUDIO) },
             onPickSpeed = ::pickSpeed,
-            onCycleOrientation = ::cycleOrientation,
             onPlayEpisode = ::playEpisode,
             onEpisodes = ::openEpisodes,
             onCopies = ::openCopies,
             // The row's picture shape button: the next shape along, as W does on the desktop.
             onCycleShape = { applyScale(videoScale.next()) },
-            onLock = ::lockScreen,
             onBack = ::finish,
             onMore = ::showOverflow,
             onRemainingToggled = { remaining ->
@@ -1354,7 +1329,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var sawPause = false
 
     private fun raiseRowForPause() {
-        if (statusOverlay.visibility == View.VISIBLE || locked || inPictureInPicture) return
+        if (statusOverlay.visibility == View.VISIBLE || inPictureInPicture) return
         rowDownBeforePause = !controlsUp
         pauseNoted = true
         controls?.show()
@@ -1367,7 +1342,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * leaves it up for the disc to turn and then lets it go, sooner when it was down before.
      */
     private fun onPauseChanged(playWhenReady: Boolean, reason: Int) {
-        val quiet = statusOverlay.visibility == View.VISIBLE || locked || inPictureInPicture || stillWatchingUp
+        val quiet = statusOverlay.visibility == View.VISIBLE || inPictureInPicture || stillWatchingUp
         if (!playWhenReady) {
             if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) return
             if (!pauseNoted) rowDownBeforePause = !controlsUp
@@ -1724,10 +1699,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val surface = touchSurface
         val pickerOpen =
             TrackPickerFragment.isOpen(supportFragmentManager)
-        if (locked) {
-            // The shield over everything takes the touch; it offers the way out and nothing else.
-            return super.dispatchTouchEvent(event)
-        }
         if (surface == null || inPictureInPicture || pickerOpen || statusOverlay.visibility == View.VISIBLE) {
             // A hold or a scrub that was under way when the sheet came up still has to end.
             if (event.actionMasked == android.view.MotionEvent.ACTION_UP ||
@@ -3825,9 +3796,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // Locked means locked: Back, the media keys, the D-pad and a keyboard all offer the way
-        // out rather than doing what they usually do. See [LockedKeys].
-        if (locked) return lockedKey(event)
         // Casting, the volume keys are the TV's.
         cast?.takeIf { it.casting }?.let { c ->
             if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
@@ -3999,51 +3967,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         return super.dispatchKeyEvent(event)
     }
 
-    /** A key while the screen is locked: the volume passes, a held select key unlocks, the rest is swallowed. */
-    private fun lockedKey(event: KeyEvent): Boolean {
-        when (LockedKeys.kind(event.keyCode)) {
-            LockedKeys.Kind.System -> return super.dispatchKeyEvent(event)
-            LockedKeys.Kind.Unlock -> when (event.action) {
-                // A key pressed since the lock, judged by when it went down rather than by its
-                // first event: a key still held from the press that chose Lock went down before
-                // it and never counts, while a hold that began after it counts even when its first
-                // down never arrived. Locking with a tap leaves the window in touch mode, and
-                // Android spends the first Enter on leaving touch mode, so only the repeats come.
-                KeyEvent.ACTION_DOWN -> if (unlockHeldKey == 0 && event.downTime >= lockedAt) {
-                    startUnlockHold(event.keyCode, heldMs = event.eventTime - event.downTime)
-                }
-                KeyEvent.ACTION_UP -> if (event.keyCode == unlockHeldKey) stopUnlockHold()
-            }
-            LockedKeys.Kind.Ignored -> if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) showUnlockPill()
-        }
-        return true
-    }
-
-    /**
-     * Mouse, trackpad and controller motion while locked: a tablet's mouse wheel, a controller's
-     * sticks. Swallowed, as the keys are; a mouse moving over the picture brings up the pill, as
-     * it brings up the desktop player's Unlock button.
-     */
-    override fun dispatchGenericMotionEvent(event: android.view.MotionEvent): Boolean {
-        if (!locked) return super.dispatchGenericMotionEvent(event)
-        if (event.actionMasked == android.view.MotionEvent.ACTION_HOVER_MOVE ||
-            event.actionMasked == android.view.MotionEvent.ACTION_SCROLL
-        ) {
-            showUnlockPill()
-        }
-        return true
-    }
-
     /**
      * Back as the dispatcher delivers it: the same peeling [dispatchKeyEvent] does for the key on
      * older Androids, the unlock pill, then the next-up card, then the row. True when something
      * took the press, false when Back is for the film itself.
      */
     private fun peelOneOverlay(): Boolean {
-        if (locked) {
-            showUnlockPill()
-            return true
-        }
         if (nextUpHasTheRemote()) {
             nextUpDismissed = true
             hideNextUp()
@@ -4513,7 +4442,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         loopHandler.removeCallbacks(undoExpiry)
         val now = SystemClock.elapsedRealtime()
         val offer = seekUndo.current(now)?.takeIf {
-            !locked && !inPictureInPicture && statusOverlay.visibility != View.VISIBLE
+            !inPictureInPicture && statusOverlay.visibility != View.VISIBLE
         }
         if (offer == null) {
             chip.hide()
@@ -4757,7 +4686,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun askStillWatching(why: String, next: MediaItem?) {
         // Its buttons have to be reachable, and the video is stopping anyway: hours without a
         // touch or a key, or a sleep timer running out, is nobody there for the lock to keep out.
-        if (locked) unlockScreen()
         stillWatchingUp = true
         hideNextUp()
         controls?.hideAnimated()
@@ -4945,149 +4873,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         showSheet { it.showDetails(mediaTitle.ifBlank { L.playerPlaybackDetails }, lines) }
     }
 
-    /**
-     * Locks the screen against touches: for a phone propped up on a lap, or handed to a child.
-     * Everything is off, the orientation is frozen, and a tap anywhere offers the unlock pill.
-     */
-    private fun lockScreen() {
-        undoChip?.hide()
-        if (locked) return
-        locked = true
-        lockedAt = android.os.SystemClock.uptimeMillis()
-        controls?.hideAnimated()
-        feedback?.clear()
-        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
-        val root = findViewById<FrameLayout>(R.id.player_root)
-        val tv = FormFactor.isTv(this)
-        val shield = lockShield ?: FrameLayout(this).also { built ->
-            built.isClickable = true
-            built.isFocusable = true
-            built.setOnClickListener { showUnlockPill() }
-            val pad = (16 * resources.displayMetrics.density).toInt()
-            val label = TextView(this).apply {
-                setTextColor(getColor(R.color.text_primary))
-                textSize = if (tv) 18f else 15f
-                gravity = Gravity.CENTER
-                setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_lock_open, 0, 0, 0)
-                compoundDrawablePadding = pad / 2
-            }
-            // Fills while a select key is held, so the remote's way out shows it is working.
-            val progress = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-                max = 1000
-                visibility = View.GONE
-                progressTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.text_primary))
-            }
-            val pill = android.widget.LinearLayout(this).apply {
-                orientation = android.widget.LinearLayout.VERTICAL
-                background = getDrawable(R.drawable.bg_player_chip)
-                setPadding(pad * 3 / 2, pad, pad * 3 / 2, pad)
-                addView(label)
-                addView(
-                    progress,
-                    android.widget.LinearLayout.LayoutParams(
-                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-                    ).apply { topMargin = pad / 2 },
-                )
-                // A tap, a mouse click or a stylus. Not a remote's OK: keys never reach the views
-                // while locked, and a held OK is the remote's way out.
-                isClickable = true
-                isFocusable = false
-                contentDescription = L.playerUnlock
-                setOnClickListener { unlockScreen() }
-            }
-            built.addView(
-                pill,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM,
-                ).apply { bottomMargin = (72 * resources.displayMetrics.density).toInt() },
-            )
-            unlockPill = pill
-            unlockText = label
-            unlockProgress = progress
-            lockShield = built
-        }
-        unlockText?.text = unlockHint()
-        if (shield.parent == null) {
-            root.addView(
-                shield,
-                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
-            )
-        }
-        updatePictureInPictureParams()
-        showUnlockPill()
-    }
-
-    /** The pill's words: a remote holds OK, a touch screen taps (a held Enter works there too). */
-    private fun unlockHint(): String = if (FormFactor.isTv(this)) L.playerHoldOkToUnlock else L.playerTapToUnlock
-
-    private fun showUnlockPill() {
-        val pill = unlockPill ?: return
-        pill.removeCallbacks(hideUnlockPill)
-        pill.animate().cancel()
-        pill.alpha = 1f
-        // Up for as long as a hold lasts; the clock starts once it is let go.
-        if (unlockHeldKey == 0) pill.postDelayed(hideUnlockPill, UNLOCK_PILL_MS)
-    }
-
-    /**
-     * A select key went down on the locked screen: unlock if it stays down for [LockedKeys.HOLD_MS].
-     * [heldMs] is how long it has been down already, when its first down was not the event that
-     * started this.
-     */
-    private fun startUnlockHold(keyCode: Int, heldMs: Long = 0L) {
-        val pill = unlockPill ?: return
-        val already = heldMs.coerceIn(0L, LockedKeys.HOLD_MS)
-        val left = LockedKeys.HOLD_MS - already
-        unlockHeldKey = keyCode
-        showUnlockPill()
-        unlockText?.text = L.playerKeepHoldingToUnlock
-        unlockProgress?.let { bar ->
-            bar.visibility = View.VISIBLE
-            val from = (bar.max * already / LockedKeys.HOLD_MS).toInt()
-            bar.progress = from
-            bar.tag = android.animation.ObjectAnimator.ofInt(bar, "progress", from, bar.max).apply {
-                duration = left
-                interpolator = android.view.animation.LinearInterpolator()
-                start()
-            }
-        }
-        pill.postDelayed(unlockAfterHold, left)
-    }
-
-    /** Let go before the hold was up: still locked, and the pill says how again. */
-    private fun stopUnlockHold() {
-        unlockHeldKey = 0
-        unlockPill?.removeCallbacks(unlockAfterHold)
-        resetUnlockProgress()
-        unlockText?.text = unlockHint()
-        showUnlockPill()
-    }
-
-    private fun resetUnlockProgress() {
-        unlockProgress?.let { bar ->
-            (bar.tag as? android.animation.Animator)?.cancel()
-            bar.tag = null
-            bar.progress = 0
-            bar.visibility = View.GONE
-        }
-    }
-
-    private fun unlockScreen() {
-        if (!locked) return
-        locked = false
-        unlockHeldKey = 0
-        unlockPill?.removeCallbacks(unlockAfterHold)
-        resetUnlockProgress()
-        unlockPill?.removeCallbacks(hideUnlockPill)
-        lockShield?.let { (it.parent as? android.view.ViewGroup)?.removeView(it) }
-        applyOrientation()
-        updatePictureInPictureParams()
-        controls?.show()
-    }
-
     /** The next-up card, on a phone and a television alike. See [NextUpCard]. */
     private fun buildNextUpCard() {
         nextUpCard = NextUpCard(
@@ -5136,7 +4921,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     if (!autoplay) continue
                     val next = _episodes.value.next ?: continue
                     val duration = exo.duration
-                    if (duration <= 0 || nextUpDismissed || locked || inPictureInPicture) continue
+                    if (duration <= 0 || nextUpDismissed || inPictureInPicture) continue
                     // Autoplay is going to stop and ask, or the sleep timer to stop: nothing
                     // is starting in thirty seconds, so nothing says it is.
                     if (sleepAtTheEnd || StillWatching.askBeforeAutoplay(autoplayedInARow)) continue
@@ -5218,7 +5003,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val duration = exo.duration
         val cardCoversTheEnd = autoplay && !nextUpDismissed && _episodes.value.next != null
         val segment = if (
-            skipSegments.isEmpty() || duration <= 0 || locked || inPictureInPicture ||
+            skipSegments.isEmpty() || duration <= 0 || inPictureInPicture ||
             statusOverlay.visibility == View.VISIBLE || nextUpCard?.isShown == true
         ) {
             null
@@ -6590,8 +6375,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         /** The smallest picture height, as a share of the screen's short side, subtitles are sized for. */
         private const val UPRIGHT_TEXT_SHARE = 0.6f
 
-        /** How long the unlock pill stays up after a tap on the locked screen. */
-        private const val UNLOCK_PILL_MS = 2_500L
 
         /** The overflow's group for Lock the screen, so a divider sets it apart. */
         private const val LOCK_GROUP = 1

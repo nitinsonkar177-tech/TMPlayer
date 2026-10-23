@@ -6,21 +6,17 @@ import com.tmplayer.i18n.L
  * How the picture is fitted to the screen, and the order the control steps through.
  *
  * A 2.39:1 video on a 16:9 panel is mostly black bars, so the viewer can trade some of the sides
- * away to fill the glass. Three stops is the whole useful range: the true shape, cropped to fill,
- * and stretched to fill.
+ * away to fill the glass. Two stops: the true shape ("Normal") and zoomed in to fill ("Zoom In").
  *
  * The integers are Media3's own `AspectRatioFrameLayout.RESIZE_MODE_*` values, kept here as
  * literals so this stays pure and testable rather than dragging a view class into a unit test.
  */
 enum class VideoScale(val resizeMode: Int, private val labelText: () -> String) {
-    /** The video's own aspect, letterboxed. What everything starts on. */
+    /** The video's own aspect, letterboxed. What everything starts on. Shown as "Normal". */
     Fit(0, { L.playerScaleFit }),
 
-    /** Cropped to fill the screen, keeping the aspect: the bars go, the edges go with them. */
+    /** Zoomed in to fill the screen, keeping the aspect: the bars go, the edges go with them. */
     Crop(4, { L.playerScaleCrop }),
-
-    /** Stretched to fill the screen. Wrong shape, but it is the viewer's screen. */
-    Stretch(3, { L.playerScaleStretch }),
     ;
 
     val label: String get() = labelText()

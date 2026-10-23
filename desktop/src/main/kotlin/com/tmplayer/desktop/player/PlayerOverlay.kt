@@ -575,7 +575,6 @@ private fun ShapeButton(scale: VideoScale, onClick: () -> Unit) {
     val icon = when (scale) {
         VideoScale.Fit -> TmIcons.ShapeFit
         VideoScale.Crop -> TmIcons.ShapeCrop
-        VideoScale.Stretch -> TmIcons.ShapeStretch
     }
     Box(Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }) {
         OverlayButton(icon, s.playerPictureShapeHint(scale.label), onClick)

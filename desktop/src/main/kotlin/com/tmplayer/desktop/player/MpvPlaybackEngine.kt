@@ -414,7 +414,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         _state.update { it.copy(scale = scale) }
     }
 
-    /** Fit is mpv's default; Crop fills by panscan; Stretch drops the aspect ratio. */
+    /** Fit is mpv's default; Crop fills by panscan. */
     private fun applyScale(scale: VideoScale) = runCatching {
         val h = handle
         when (scale) {
@@ -425,10 +425,6 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             VideoScale.Crop -> {
                 h.setPropertyBoolean("keepaspect", true)
                 h.setPropertyDouble("panscan", 1.0)
-            }
-            VideoScale.Stretch -> {
-                h.setPropertyDouble("panscan", 0.0)
-                h.setPropertyBoolean("keepaspect", false)
             }
         }
     }

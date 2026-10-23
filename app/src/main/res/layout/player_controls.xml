@@ -417,19 +417,6 @@
                     android:paddingBottom="2dp">
 
                     <ImageButton
-                        android:id="@+id/control_subtitles"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Subtitles"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_subtitles"
-                        android:tint="@color/player_control_icon" />
-
-                    <ImageButton
                         android:id="@+id/control_audio"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
@@ -473,50 +460,6 @@
                         android:tint="@color/player_control_icon"
                         android:visibility="gone" />
 
-                    <ImageButton
-                        android:id="@+id/control_rotate"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Screen orientation"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_rotate_landscape"
-                        android:tint="@color/player_control_icon"
-                        android:visibility="gone" />
-
-                    <!-- Phone only, and only while the row has room: the lock, a press away
-                         rather than first in the overflow. A phone held upright keeps it there. -->
-                    <ImageButton
-                        android:id="@+id/control_lock"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Lock the screen"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_lock"
-                        android:tint="@color/player_control_icon"
-                        android:visibility="gone" />
-
-                    <!-- Television only: the row's overflow, last so it is the end of the walk.
-                         The phone's is in its top bar. -->
-                    <ImageButton
-                        android:id="@+id/control_tv_more"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="More"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_more_vert"
-                        android:tint="@color/player_control_icon"
-                        android:visibility="gone" />
                 </LinearLayout>
             </HorizontalScrollView>
 

@@ -61,10 +61,8 @@ class PlayerControls(
     private val player: () -> Player?,
     private val onVisibility: (Boolean) -> Unit,
     private val onTogglePlay: () -> Unit,
-    private val onPickSubtitles: () -> Unit,
     private val onPickAudio: () -> Unit,
     private val onPickSpeed: () -> Unit,
-    private val onCycleOrientation: () -> Unit,
     private val onPlayEpisode: (MediaItem) -> Unit,
     /** The phone's top bar back arrow, and the overflow (the phone's top bar, the end of the television's row). */
     private val onBack: () -> Unit = {},
@@ -75,10 +73,8 @@ class PlayerControls(
     private val onEpisodes: () -> Unit = {},
     /** The row's copy button: opens the list of this video's copies. */
     private val onCopies: () -> Unit = {},
-    /** The row's picture shape button: the next of Fit, Crop and Stretch. */
+    /** The row's picture shape button: Normal or Zoom In. */
     private val onCycleShape: () -> Unit = {},
-    /** The phone row's lock, shown while the row has room for it. */
-    private val onLock: () -> Unit = {},
 ) {
 
     private val container: View = root.findViewById(R.id.player_controls)
@@ -86,9 +82,7 @@ class PlayerControls(
     private val subtitle: TextView = root.findViewById(R.id.controls_subtitle)
     private val timeBar: DefaultTimeBar = root.findViewById(R.id.controls_timebar)
     private val clock: TextView = root.findViewById(R.id.controls_clock)
-    private val rotate: ImageButton = root.findViewById(R.id.control_rotate)
     private val shapeButton: ImageButton = root.findViewById(R.id.control_shape)
-    private val lockButton: ImageButton = root.findViewById(R.id.control_lock)
     private val time: TextView get() = timeText
 
     // The phone's pieces. Present in the layout on every device, shown only on a phone.
@@ -238,16 +232,12 @@ class PlayerControls(
     private var tipFor: View? = null
 
     init {
-        wire(root.findViewById(R.id.control_subtitles)) { onPickSubtitles() }
         wire(root.findViewById(R.id.control_audio)) { onPickAudio() }
         wire(root.findViewById(R.id.control_speed)) { onPickSpeed() }
-        wire(rotate) { onCycleOrientation() }
         wire(shapeButton) { onCycleShape() }
-        wire(lockButton) { onLock() }
         wire(episodesButton) { onEpisodes() }
         wire(copyButton) { onCopies() }
         episodesButton.text = L.episodesTitle
-        rotate.visibility = if (isTv) View.GONE else View.VISIBLE
         // The scrims on five stops, which their XML stand-ins cannot hold without a seam.
         root.findViewById<View>(R.id.controls_scrim_top).background = ControlsScrim.top()
         root.findViewById<View>(R.id.controls_scrim_bottom).background = ControlsScrim.bottom()
@@ -568,7 +558,6 @@ class PlayerControls(
      * does not.
      */
     val shapeOnRow: Boolean get() = shapeButton.visibility == View.VISIBLE
-    val lockOnRow: Boolean get() = lockButton.visibility == View.VISIBLE
 
     /**
      * Shows or hides the phone's two extra buttons by the room the row has. Before the first
@@ -580,9 +569,8 @@ class PlayerControls(
         val width = cluster.width.takeIf { it > 0 } ?: metrics.widthPixels
         val across = (width - cluster.paddingLeft - cluster.paddingRight) / metrics.density
         val wanted = if (across >= WIDE_ROW_DP) View.VISIBLE else View.GONE
-        if (shapeButton.visibility == wanted && lockButton.visibility == wanted) return
+        if (shapeButton.visibility == wanted) return
         shapeButton.visibility = wanted
-        lockButton.visibility = wanted
     }
 
     /**
@@ -605,13 +593,10 @@ class PlayerControls(
         centerPlay.nextFocusDownId = R.id.controls_timebar
         timeBar.nextFocusUpId = R.id.center_play_pause
         // Down from the bar lands on the first button the row has.
-        timeBar.nextFocusDownId = R.id.control_subtitles
-        val more = root.findViewById<View>(R.id.control_tv_more)
-        more.visibility = View.VISIBLE
-        // Between speed and More: a press steps the shape, focus stays put for the next press,
-        // and the glyph and the answer over the picture say which shape it is on.
+        timeBar.nextFocusDownId = R.id.control_audio
+        // A press steps the shape, focus stays put for the next press, and the glyph and the
+        // answer over the picture say which shape it is on.
         shapeButton.visibility = View.VISIBLE
-        wire(more) { onMore(more) }
         timeText.isFocusable = true
         timeText.isClickable = true
         // Focus fills the readout with a white pill and darkens its text, the buttons' own cue in
@@ -625,11 +610,9 @@ class PlayerControls(
         // The icon buttons say their name over them while the remote is on them. The readout and
         // Episodes are words already.
         tipOnFocus(
-            root.findViewById(R.id.control_subtitles),
             root.findViewById(R.id.control_audio),
             root.findViewById(R.id.control_speed),
             shapeButton,
-            more,
             centerPlay,
         )
     }
@@ -661,12 +644,8 @@ class PlayerControls(
             R.id.center_play_pause to L.commonPause,
             R.id.center_next to L.playerNextEpisode,
             R.id.times_duration to L.playerShowTimeRemaining,
-            R.id.control_subtitles to L.tracksSubtitles,
             R.id.control_audio to L.playerAudio,
             R.id.control_speed to L.playerPlaybackSpeed,
-            R.id.control_rotate to L.playerScreenOrientation,
-            R.id.control_lock to L.playerLockScreen,
-            R.id.control_tv_more to L.commonMore,
             R.id.control_episodes to L.episodesTitle,
             R.id.control_copy to L.playerCopies,
         )
@@ -812,7 +791,6 @@ class PlayerControls(
             when (scale) {
                 VideoScale.Fit -> R.drawable.ic_shape_fit
                 VideoScale.Crop -> R.drawable.ic_shape_crop
-                VideoScale.Stretch -> R.drawable.ic_shape_stretch
             },
         )
         describe(shapeButton, L.playerPictureShapeNow(scale.label))
@@ -874,7 +852,7 @@ class PlayerControls(
      */
     fun focusRow() {
         if (!isTv || !visible) return
-        container.findViewById<View>(R.id.control_subtitles).requestFocus()
+        container.findViewById<View>(R.id.control_audio).requestFocus()
         poke()
     }
 
