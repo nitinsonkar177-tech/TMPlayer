@@ -5,7 +5,7 @@ name: Lite build
 # cannot sign in, which is fine for a pipeline check).
 on:
   push:
-    branches: [main]
+    branches: [main, "lite-*"]
     paths-ignore:
       - "site/**"
       - "docs/**"
