@@ -3,267 +3,40 @@ package com.tmplayer.player
 import com.tmplayer.i18n.L
 
 /**
- * One line of the television player's More menu.
- *
- * The phone has had these behind its overflow button for a while; the television's row had no
- * overflow at all, so everything here was either a held key away or missing. Kept as plain values
- * rather than lambdas so which lines appear, and in what order, can be tested without a screen.
+ * One line of the television player's More menu. This build has no entries left for it: the
+ * features the menu held (lock, sleep timer, repeat, bookmarks, downloads, casting into picture
+ * in picture and the rest) are not part of the app, so the menu itself is gone and the enum is
+ * empty on purpose.
  */
-enum class PlayerMenuEntry {
-    // The episode steps are not here: the row's Episodes button opens the episode list, with the
-    // previous and next episode at its top, and the remote's media keys step as well.
-    /**
-     * First, as on the phone: a child lock for the remote. Every key is ignored until OK is held
-     * for a couple of seconds, which a press or a mash of the D-pad does not do by accident.
-     */
-    LockScreen,
-    PlaybackDetails,
-    StartOver,
-    /** Louder: quiet dialogue lifted, the peaks kept from clipping. On or off, and the menu closes. */
-    VolumeBoost,
-    /** Night mode: the range squeezed, so loud scenes are quieter and dialogue clearer. */
-    NightMode,
-    /** A page of lengths, and the time left on one that is running. */
-    SleepTimer,
-    /** A-B repeat: set the start, then the end, then stop; the line says which comes next. */
-    AbLoop,
-    /**
-     * A chaptered file only ([MkvChapters]). Lines rather than keys, as the frame steps are: Left
-     * and Right on the bare picture jump and on the bar travel, and 1.16.0's key model stays.
-     */
-    NextChapter,
-    PreviousChapter,
-    /** Only while paused, and only here: the arrows already seek, so frame steps get no key. */
-    NextFrame,
-    PreviousFrame,
-    /** Saves the moment playing at once; a note can be added from Bookmarks, where typing is optional. */
-    AddBookmark,
-    /** This video's bookmarks: play from one, give it a note, delete it. */
-    Bookmarks,
-    SaveToDownloads,
-    /** "Mark as watched", or "Mark as unwatched" once it is on the list. */
-    MarkWatched,
-    // Picture shape is not here: the row's own button steps it (2026-10-18), a press per shape
-    // rather than More, a line and a page.
-    PictureInPicture,
-    OpenInAnotherApp,
-    RemoteKeys,
-}
+enum class PlayerMenuEntry
 
 /**
- * One line of the phone's overflow menu.
- *
- * Speed is not here: the bottom row's button opens the same sheet. Start over is not here either:
- * the resume notice carries it for the first seconds, and the bar reaches zero.
+ * One line of the phone's overflow menu. All that remains is the picture shape page, and only
+ * while the bottom row has no room for its own button (a phone held upright), so the pinch is
+ * not the only way there.
  */
 enum class PhoneMenuEntry {
-    /** First and set apart with its icon: the line people come to the menu for (user, 2026-10-18). */
-    LockScreen,
-    PictureInPicture,
-    /**
-     * Fit, crop or stretch, as a page of the three: only while the row has no room for its
-     * button (a phone held upright), so the pinch is not the only way there.
-     */
     PictureShape,
-    VolumeBoost,
-    NightMode,
-    SleepTimer,
-    /** A-B repeat, as on the television: one line that says what the next press does. */
-    AbLoop,
-    /** A chaptered file only, as on the television. */
-    NextChapter,
-    PreviousChapter,
-    /** Only while paused: a step on a playing video would be lost in the next frame anyway. */
-    NextFrame,
-    PreviousFrame,
-    /**
-     * The picture on screen as a PNG in Pictures/TMPlayer, with Share on the answer. Never for a
-     * chat that restricts saving, and never on a television, which has nowhere to look at it.
-     */
-    SaveFrame,
-    /** Asks for an optional note, then saves the moment the note was asked at. */
-    AddBookmark,
-    Bookmarks,
-    OpenInAnotherApp,
-    LoadSubtitleFile,
-    SaveToDownloads,
-    MarkWatched,
-    /** Last: a line for bug reports, not for watching. */
-    PlaybackDetails,
 }
 
-/**
- * The line's text. [sleepDetail] is a running sleep timer's time left, which the line carries;
- * [watched] turns Mark as watched into Mark as unwatched; [loop] is the repeat marked so far;
- * [bookmarks] is how many bookmarks the video has.
- */
+/** The line's text. [shape] names the fitting in force beside the page's name. */
 fun PhoneMenuEntry.label(
-    sleepDetail: String? = null,
-    watched: Boolean = false,
-    loop: AbLoop? = null,
-    bookmarks: Int = 0,
     shape: VideoScale? = null,
 ): String = when (this) {
-    PhoneMenuEntry.LockScreen -> L.playerLockScreen
-    PhoneMenuEntry.PictureInPicture -> L.playerPictureInPicture
     PhoneMenuEntry.PictureShape -> shape?.let { L.commonWithDetail(L.playerPictureShape, it.label) } ?: L.playerPictureShape
-    PhoneMenuEntry.VolumeBoost -> L.playerVolumeBoost
-    PhoneMenuEntry.NightMode -> L.playerNightMode
-    PhoneMenuEntry.SleepTimer -> sleepDetail?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer
-    PhoneMenuEntry.AbLoop -> PlayerMenu.loopLabel(loop)
-    PhoneMenuEntry.NextChapter -> L.playerChapterNext
-    PhoneMenuEntry.PreviousChapter -> L.playerChapterPrevious
-    PhoneMenuEntry.NextFrame -> L.playerFrameNext
-    PhoneMenuEntry.PreviousFrame -> L.playerFramePrevious
-    PhoneMenuEntry.SaveFrame -> L.playerSaveFrame
-    PhoneMenuEntry.OpenInAnotherApp -> L.playerOpenInAnotherApp
-    PhoneMenuEntry.LoadSubtitleFile -> L.playerLoadSubtitleFile
-    PhoneMenuEntry.SaveToDownloads -> L.playerSaveToDownloads
-    PhoneMenuEntry.MarkWatched -> if (watched) L.playerMarkUnwatched else L.playerMarkWatched
-    PhoneMenuEntry.AddBookmark -> L.playerAddBookmark
-    PhoneMenuEntry.Bookmarks -> if (bookmarks > 0) L.commonWithDetail(L.playerBookmarks, L.messages.formatter.number(bookmarks)) else L.playerBookmarks
-    PhoneMenuEntry.PlaybackDetails -> L.playerPlaybackDetails
 }
 
 /** Which lines the More menu offers on this device, in the order it draws them. */
 object PlayerMenu {
 
-    /** The repeat line's text: what choosing it does next, given the repeat marked so far. */
-    fun loopLabel(loop: AbLoop?): String = when {
-        loop == null -> L.playerLoopSetStart
-        loop.complete -> L.playerLoopClear
-        else -> L.playerLoopSetEnd
-    }
+    /** The television's More menu: nothing. The remote's row keeps its own buttons only. */
+    fun tvEntries(): List<PlayerMenuEntry> = emptyList()
 
     /**
-     * The television's More menu.
-     *
-     * [pictureInPicture] is whether the device can do it at all (Android TV has supported it since
-     * 8.0, but not every stick ships the feature), because a line that does nothing when chosen is
-     * worse than no line.
-     *
-     * [saveToDownloads] is whether the video can still become a download: not one already in
-     * Downloads or in the queue, which would make the line a press that does nothing.
-     *
-     * [markWatched] is whether the video came from a message: the Watched list is keyed by one,
-     * so a file with none has nothing to mark.
-     *
-     * [openInAnotherApp] is false for a video from a chat that restricts saving content, whose
-     * file must not be handed to another app.
-     *
-     * [paused] adds the frame steps. They live only here on the television: Left and Right on the
-     * bare picture jump, and on the bar they travel, so no arrow is free for a frame.
-     *
-     * [bookmarks] is whether the video can keep bookmarks: like the Watched list, they are keyed
-     * by its message. Their lines sit with the repeat and the frame steps, the other ways of
-     * working through one moment of a video.
-     *
-     * [chapters] is whether the file has chapter marks, which adds the chapter steps.
+     * The phone's overflow: the picture shape page when the row has no button for it right now,
+     * and nothing otherwise.
      */
-    fun tvEntries(
-        pictureInPicture: Boolean,
-        saveToDownloads: Boolean = false,
-        markWatched: Boolean = false,
-        openInAnotherApp: Boolean = true,
-        paused: Boolean = false,
-        bookmarks: Boolean = false,
-        chapters: Boolean = false,
-    ): List<PlayerMenuEntry> = buildList {
-        add(PlayerMenuEntry.LockScreen)
-        add(PlayerMenuEntry.PlaybackDetails)
-        add(PlayerMenuEntry.StartOver)
-        add(PlayerMenuEntry.VolumeBoost)
-        add(PlayerMenuEntry.NightMode)
-        add(PlayerMenuEntry.SleepTimer)
-        add(PlayerMenuEntry.AbLoop)
-        if (chapters) {
-            add(PlayerMenuEntry.NextChapter)
-            add(PlayerMenuEntry.PreviousChapter)
-        }
-        if (paused) {
-            add(PlayerMenuEntry.NextFrame)
-            add(PlayerMenuEntry.PreviousFrame)
-        }
-        if (bookmarks) {
-            add(PlayerMenuEntry.AddBookmark)
-            add(PlayerMenuEntry.Bookmarks)
-        }
-        if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
-        if (markWatched) add(PlayerMenuEntry.MarkWatched)
-        if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
-        if (openInAnotherApp) add(PlayerMenuEntry.OpenInAnotherApp)
-        add(PlayerMenuEntry.RemoteKeys)
-    }
-
-    /**
-     * The phone's overflow, in the order it draws. [pictureInPicture] is whether the device can do
-     * it; [openInAnotherApp] false for a chat that restricts saving; [markWatched]
-     * needs a message to point at, and so does [bookmarks]; [saveToDownloads] only while the video
-     * can still become one; [paused] adds the frame steps. Lines rather than buttons, so the row
-     * CP37 cleared stays clear. [chapters] adds the chapter steps. [saveFrame] is false for a
-     * chat that restricts saving (or while that is still being asked), whose frames stay in it.
-     * [pictureShape] is whether the row has no picture shape button right now, which puts its
-     * page here instead. The lock stays first either way: the line people come here for.
-     */
-    fun phoneEntries(
-        pictureInPicture: Boolean,
-        openInAnotherApp: Boolean,
-        saveToDownloads: Boolean,
-        markWatched: Boolean,
-        paused: Boolean = false,
-        bookmarks: Boolean = false,
-        chapters: Boolean = false,
-        saveFrame: Boolean = false,
-        pictureShape: Boolean = false,
-    ): List<PhoneMenuEntry> = buildList {
-        add(PhoneMenuEntry.LockScreen)
-        if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
+    fun phoneEntries(pictureShape: Boolean = false): List<PhoneMenuEntry> = buildList {
         if (pictureShape) add(PhoneMenuEntry.PictureShape)
-        add(PhoneMenuEntry.VolumeBoost)
-        add(PhoneMenuEntry.NightMode)
-        add(PhoneMenuEntry.SleepTimer)
-        add(PhoneMenuEntry.AbLoop)
-        if (chapters) {
-            add(PhoneMenuEntry.NextChapter)
-            add(PhoneMenuEntry.PreviousChapter)
-        }
-        if (paused) {
-            add(PhoneMenuEntry.NextFrame)
-            add(PhoneMenuEntry.PreviousFrame)
-        }
-        if (saveFrame) add(PhoneMenuEntry.SaveFrame)
-        if (bookmarks) {
-            add(PhoneMenuEntry.AddBookmark)
-            add(PhoneMenuEntry.Bookmarks)
-        }
-        if (openInAnotherApp) add(PhoneMenuEntry.OpenInAnotherApp)
-        add(PhoneMenuEntry.LoadSubtitleFile)
-        if (saveToDownloads) add(PhoneMenuEntry.SaveToDownloads)
-        if (markWatched) add(PhoneMenuEntry.MarkWatched)
-        add(PhoneMenuEntry.PlaybackDetails)
     }
-}
-
-/**
- * The remote's keys and what each does in the player, for the More menu's Remote keys sheet.
- *
- * The same table INSTALL.md prints under "Using the remote", so somebody who never read the
- * install guide can still find out that OK twice pauses, and a change to one is a change to both.
- */
-object RemoteKeys {
-    val ROWS: List<Pair<String, String>> get() = listOf(
-        L.playerKeyLeftRight to L.playerKeyLeftRightDoes,
-        L.playerKeyOk to L.playerKeyOkDoes,
-        L.playerKeyPlayPause to L.playerKeyPlayPauseDoes,
-        L.playerKeySeekBar to L.playerKeySeekBarDoes,
-        L.playerKeyDown to L.playerKeyDownDoes,
-        L.playerKeyTime to L.playerKeyTimeDoes,
-        L.playerKeyDigits to L.playerKeyDigitsDoes,
-        L.playerKeyUpJump to L.playerKeyUpJumpDoes,
-        L.playerKeyRewind to L.playerKeyRewindDoes,
-        L.playerKeyNext to L.playerKeyNextDoes,
-        L.playerKeyHoldOk to L.playerKeyHoldOkDoes,
-        L.playerKeyHoldOkLocked to L.playerKeyHoldOkLockedDoes,
-        L.playerKeyBack to L.playerKeyBackDoes,
-    )
 }

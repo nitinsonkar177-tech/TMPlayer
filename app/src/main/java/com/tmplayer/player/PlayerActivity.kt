@@ -273,7 +273,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var controls: PlayerControls? = null
 
     /** The television's More menu, the phone's overflow in its own form. Null on a phone. */
-    private var tvMenu: PlayerTvMenu? = null
 
     /** The speed, sleep timer and playback details sheets, on a phone and a television alike. */
     private var sheets: PlayerSheets? = null
@@ -791,37 +790,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // The text answers (and the resume offer) on both devices; the touch feedback around them
         // only ever fires from the phone's gestures.
         feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
-        if (FormFactor.isTv(this)) {
-            tvMenu = PlayerTvMenu(
-                activity = this,
-                root = findViewById(R.id.player_root),
-                title = { mediaTitle },
-                pictureInPicture = { packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) },
-                saveToDownloads = ::canSaveToDownloads,
-                markWatched = ::hasMessage,
-                watched = { onWatchedList },
-                bookmarks = ::hasMessage,
-                bookmarkCount = { bookmarkList.value.size },
-                openInAnotherApp = { savable == true },
-                volumeBoost = { volumeBoostOn },
-                nightMode = { nightModeOn },
-                sleepTimer = ::sleepTimerDetail,
-                onSleepTimer = ::setSleepTimer,
-                sleepChoice = ::sleepChoice,
-                loop = { abLoop },
-                paused = ::isPaused,
-                chapter = {
-                    if (chapters.isEmpty()) null
-                    else Chapters.labelAt(chapters, player?.currentPosition ?: 0L) ?: L.playerBeforeFirstChapter
-                },
-                onEntry = ::onTvMenuEntry,
-                onClosed = { menuOpen = false; holdControls(); controls?.show(); controls?.focusRow() },
-            )
-        }
         sheets = PlayerSheets(this, findViewById(R.id.player_root)) {
             detailsOpen = false
             holdControls()
-            if (tvMenu != null) {
+            if (FormFactor.isTv(this)) {
                 controls?.show()
                 controls?.focusRow()
             }
@@ -2671,7 +2643,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // so the loading sheet counts as something worth staying awake for.
             keepScreenOn(isPlaying || openingFilm)
             controls?.onPlayingChanged()
-            updatePictureInPictureParams()
             // A pause is a natural place to stop for the night: written now, not at the next
             // heartbeat, which only beats while playing. A stall for bytes is not a pause.
             if (!isPlaying && player?.playWhenReady == false) saveResumePosition()
@@ -4384,71 +4355,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // No picture in picture in this build: leaving the player leaves it.
     }
 
-    /** The overflow menu's and the row's picture in picture: straight into the corner. */
-    private fun enterPictureInPictureNow() {
-        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
-        runCatching { enterPictureInPictureMode(pictureInPictureParams()) }
-    }
-
-    /**
-     * Keeps the system's picture in picture request in step with playback: entered on its own when
-     * the viewer goes home while something plays, never over a paused video or a status sheet.
-     */
-    private fun updatePictureInPictureParams() {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return
-        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
-        runCatching { setPictureInPictureParams(pictureInPictureParams()) }
-    }
-
-    private fun pictureInPictureParams(): PictureInPictureParams {
-        val builder = PictureInPictureParams.Builder()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            // Never on a television: Home there means leaving the film (Decision E10), and the
-            // corner window is only for a viewer who asked for it from the row or More.
-            val autoEnter = !FormFactor.isTv(this) &&
-                player?.isPlaying == true &&
-                statusOverlay.visibility != View.VISIBLE &&
-                !locked
-            builder.setAutoEnterEnabled(autoEnter)
-        }
-        // The window grows out of the picture rather than out of a grey box.
-        touchSurface?.let { view ->
-            val bounds = android.graphics.Rect()
-            if (view.getGlobalVisibleRect(bounds)) builder.setSourceRectHint(bounds)
-        }
-        // Android refuses anything narrower than 1:2.39 or wider than 2.39:1, and a video that
-        // falls outside that takes the whole request down with it, so it is only offered when
-        // the picture's own shape is known to be inside the range.
-        if (videoWidth > 0 && videoHeight > 0) {
-            val ratio = videoWidth.toFloat() / videoHeight
-            if (ratio in PIP_MIN_RATIO..PIP_MAX_RATIO) {
-                builder.setAspectRatio(Rational(videoWidth, videoHeight))
-            }
-        }
-        return builder.build()
-    }
-
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
-        newConfig: Configuration,
-    ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        inPictureInPicture = isInPictureInPictureMode
-        if (!isInPictureInPictureMode) pictureInPictureEndedAt = SystemClock.elapsedRealtime()
-        // At thumbnail size there is room for the picture and nothing else. The system draws its
-        // own play and pause over the window, fed by the media session.
-        if (isInPictureInPictureMode) {
-            controls?.hideNow()
-            feedback?.clear()
-            hideNextUp()
-            hideSkipPill()
-            undoChip?.hide()
-        }
-        subtitleView.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
-        downloadChip.visibility = View.GONE
-        gestures?.controlsVisible = false
-    }
-
     // ---- the phone's extras: settings, overflow, lock, next up --------------------------------
 
     /** Hands the viewer's touch settings to everything that reads them. */
@@ -4472,97 +4378,26 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * [PlayerMenu.phoneEntries] for what is in it and why Speed and Start over are not.
      */
     private fun showOverflow(anchor: View) {
-        menuOpen = true
-        holdControls()
-        tvMenu?.let { it.open(); return }
-        val menu = android.widget.PopupMenu(this, anchor, Gravity.END)
-        val items = menu.menu
         val entries = PlayerMenu.phoneEntries(
-            pictureInPicture = packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE),
-            openInAnotherApp = savable == true,
-            saveToDownloads = canSaveToDownloads(),
-            markWatched = hasMessage(),
-            paused = isPaused(),
-            bookmarks = hasMessage(),
-            chapters = chapters.isNotEmpty(),
-            // Only once the chat is known to allow saving: a protected chat's frames stay in it.
-            saveFrame = savable == true,
             // Only while the row has no button for it: a phone held upright.
             pictureShape = controls?.shapeOnRow != true,
         )
-        // Speed and the sleep timer open the pickers' sheet rather than a submenu, so a choice
-        // of one of several looks the same here as the subtitle and audio pickers.
+        if (entries.isEmpty()) return
+        menuOpen = true
+        holdControls()
+        val menu = android.widget.PopupMenu(this, anchor, Gravity.END)
+        val items = menu.menu
         entries.forEachIndexed { order, entry ->
-            val label = entry.label(
-                sleepDetail = sleepTimerDetail(),
-                watched = onWatchedList,
-                loop = abLoop,
-                bookmarks = bookmarkList.value.size,
-                shape = videoScale,
-            )
-            // Lock the screen heads the menu in a group of its own, under a divider, with the
-            // lock the television's and the desktop's menus draw beside the same words.
-            val lock = entry == PhoneMenuEntry.LockScreen
-            val item = items.add(if (lock) LOCK_GROUP else 0, entry.ordinal, order, label)
-            if (lock) item.setIcon(R.drawable.ic_lock)
-            if (entry == PhoneMenuEntry.VolumeBoost) item.setCheckable(true).setChecked(volumeBoostOn)
-            if (entry == PhoneMenuEntry.NightMode) item.setCheckable(true).setChecked(nightModeOn)
+            items.add(0, entry.ordinal, order, entry.label(shape = videoScale))
         }
-        androidx.core.view.MenuCompat.setGroupDividerEnabled(items, true)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) menu.setForceShowIcon(true)
         menu.setOnMenuItemClickListener { item ->
             when (PhoneMenuEntry.entries[item.itemId]) {
-                PhoneMenuEntry.LockScreen -> lockScreen()
-                PhoneMenuEntry.PictureInPicture -> enterPictureInPictureNow()
                 PhoneMenuEntry.PictureShape -> showSheet { it.showShape(videoScale, ::applyScale) }
-                PhoneMenuEntry.VolumeBoost -> toggleVolumeBoost()
-                PhoneMenuEntry.NightMode -> toggleNightMode()
-                PhoneMenuEntry.SleepTimer -> showSheet { it.showSleep(sleepTimerDetail(), sleepChoice(), ::setSleepTimer) }
-                PhoneMenuEntry.AbLoop -> pressLoop()
-                PhoneMenuEntry.NextChapter -> stepChapter(forward = true)
-                PhoneMenuEntry.PreviousChapter -> stepChapter(forward = false)
-                PhoneMenuEntry.NextFrame -> frameStep(forward = true)
-                PhoneMenuEntry.PreviousFrame -> frameStep(forward = false)
-                PhoneMenuEntry.SaveFrame -> saveFrame()
-                PhoneMenuEntry.OpenInAnotherApp -> openInAnotherApp()
-                PhoneMenuEntry.LoadSubtitleFile -> subtitleFiles.pick()
-                PhoneMenuEntry.SaveToDownloads -> saveToDownloads()
-                PhoneMenuEntry.MarkWatched -> toggleWatched()
-                PhoneMenuEntry.AddBookmark -> {
-                    val at = player?.currentPosition ?: 0L
-                    showSheet { it.showNewBookmark(at, bookmarkActions()) }
-                }
-                PhoneMenuEntry.Bookmarks -> showSheet { it.showBookmarks(bookmarkActions()) }
-                PhoneMenuEntry.PlaybackDetails -> showPlaybackDetails()
             }
             true
         }
         menu.setOnDismissListener { menuOpen = false; holdControls() }
         menu.show()
-    }
-
-    /** What a line of the television's More menu does. */
-    private fun onTvMenuEntry(entry: PlayerMenuEntry) {
-        when (entry) {
-            PlayerMenuEntry.LockScreen -> lockScreen()
-            PlayerMenuEntry.PlaybackDetails -> showPlaybackDetails()
-            PlayerMenuEntry.StartOver -> startOver()
-            PlayerMenuEntry.PictureInPicture -> enterPictureInPictureNow()
-            PlayerMenuEntry.OpenInAnotherApp -> openInAnotherApp()
-            PlayerMenuEntry.SaveToDownloads -> saveToDownloads()
-            PlayerMenuEntry.MarkWatched -> toggleWatched()
-            PlayerMenuEntry.VolumeBoost -> toggleVolumeBoost()
-            PlayerMenuEntry.NightMode -> toggleNightMode()
-            PlayerMenuEntry.AbLoop -> pressLoop()
-            PlayerMenuEntry.NextChapter -> stepChapter(forward = true)
-            PlayerMenuEntry.PreviousChapter -> stepChapter(forward = false)
-            PlayerMenuEntry.NextFrame -> frameStep(forward = true)
-            PlayerMenuEntry.PreviousFrame -> frameStep(forward = false)
-            PlayerMenuEntry.AddBookmark -> addBookmark(player?.currentPosition ?: 0L, "")
-            PlayerMenuEntry.Bookmarks -> showSheet { it.showBookmarks(bookmarkActions()) }
-            // Pages of the menu itself, opened there.
-            PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys -> Unit
-        }
     }
 
     /** Paused by the viewer, not stalled for bytes: when the frame steps are offered. */
@@ -4787,7 +4622,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val message = messageId
         App.backgroundScope.launch { runCatching { store.add(chat, message, positionMs, note) } }
         val at = Translator.messages.formatter.clock(positionMs)
-        showGestureFeedback(if (tvMenu != null && note.isEmpty()) L.playerBookmarkSavedTv(at) else L.playerBookmarkSaved(at))
+        showGestureFeedback(L.playerBookmarkSaved(at))
     }
 
     /** What the bookmark sheets do with a choice: all of it lands here, on this video. */
