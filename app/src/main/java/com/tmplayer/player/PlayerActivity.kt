@@ -3508,17 +3508,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 hasNext = next != null,
                 autoplay = autoplay,
                 nextUpDismissed = nextUpDismissed,
-                sleepAtTheEnd = sleepAtTheEnd,
+                sleepAtTheEnd = false,
                 askBeforeAutoplay = StillWatching.askBeforeAutoplay(autoplayedInARow),
                 nextUpShown = nextUpShown,
                 unseen = unseen,
             )
             when (end) {
-                BackgroundPlayback.AtTheEnd.SleepEnded -> {
-                    sleepAtTheEnd = false
-                    askStillWatching(L.playerStillWatchingSleepEnd, next)
-                    return@launch
-                }
                 BackgroundPlayback.AtTheEnd.Finished -> {
                     showFinished()
                     return@launch
@@ -3563,7 +3558,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         hasNext = _episodes.value.next != null,
         autoplay = autoplayNext,
         nextUpDismissed = nextUpDismissed,
-        sleepAtTheEnd = sleepAtTheEnd,
+        sleepAtTheEnd = false,
         askBeforeAutoplay = StillWatching.askBeforeAutoplay(autoplayedInARow),
         nextUpShown = nextUpShown,
         unseen = true,
@@ -4570,20 +4565,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         lifecycleScope.launch { runCatching { settings.setNightMode(on) } }
     }
 
-    /** What the menu says about a running sleep timer, or null when there is none. */
-    private fun sleepTimerDetail(): String? = when {
-        sleepAtTheEnd -> SleepTimer.label(SleepTimer.END_OF_VIDEO)
-        sleepAt > 0 -> SleepTimer.remaining(sleepAt - SystemClock.elapsedRealtime())
-        else -> null
-    }
-
-    /** The length the running sleep timer was started with, or null when there is none. */
-    private fun sleepChoice(): Int? = when {
-        sleepAtTheEnd -> SleepTimer.END_OF_VIDEO
-        sleepAt > 0 -> sleepMinutes
-        else -> null
-    }
-
     /**
      * Opens one of [sheets], holding the controls while it is up. Its own flag, like the details
      * dialog's was, because the overflow it opens from closes after it is already up.
@@ -4595,24 +4576,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         holdControls()
     }
 
-    /** Minutes from now, [SleepTimer.END_OF_VIDEO], or null to turn the timer off. */
-    private fun setSleepTimer(minutes: Int?) {
-        sleepMinutes = minutes ?: 0
-        sleepAtTheEnd = minutes == SleepTimer.END_OF_VIDEO
-        sleepAt = if (minutes != null && minutes != SleepTimer.END_OF_VIDEO) {
-            SystemClock.elapsedRealtime() + minutes * 60_000L
-        } else {
-            0L
-        }
-        showGestureFeedback(
-            when (minutes) {
-                null -> L.playerSleepTimerOff
-                SleepTimer.END_OF_VIDEO -> L.playerSleepTimerEnd
-                else -> L.playerSleepTimerIn(SleepTimer.label(minutes))
-            },
-        )
-    }
-
     /**
      * Starts or carries on the counts "Still watching?" keeps, and looks at them every
      * [STILL_WATCHING_TICK_MS]: the sleep timer running out, and two hours of playback without a
@@ -4622,8 +4585,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun startStillWatchingCounts() {
         if (!openedByAutoplay) {
             autoplayedInARow = 0
-            sleepAt = 0L
-            sleepAtTheEnd = false
             lastInputAt = SystemClock.elapsedRealtime()
         }
         openedByAutoplay = false
@@ -4634,10 +4595,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (stillWatchingUp) continue
                 val exo = player ?: continue
                 val now = SystemClock.elapsedRealtime()
-                if (sleepAt in 1..now) {
-                    sleepAt = 0L
-                    askStillWatching(L.playerStillWatchingSleep, next = null)
-                } else if (exo.isPlaying && StillWatching.askAfterIdle(now - lastInputAt)) {
+                if (exo.isPlaying && StillWatching.askAfterIdle(now - lastInputAt)) {
                     askStillWatching(L.playerStillWatchingIdle, next = null)
                 }
             }
@@ -4889,9 +4847,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     val next = _episodes.value.next ?: continue
                     val duration = exo.duration
                     if (duration <= 0 || nextUpDismissed || inPictureInPicture) continue
-                    // Autoplay is going to stop and ask, or the sleep timer to stop: nothing
-                    // is starting in thirty seconds, so nothing says it is.
-                    if (sleepAtTheEnd || StillWatching.askBeforeAutoplay(autoplayedInARow)) continue
+                    // Autoplay is going to stop and ask: nothing is starting in thirty seconds,
+                    // so nothing says it is.
+                    if (StillWatching.askBeforeAutoplay(autoplayedInARow)) continue
                     val position = exo.currentPosition
                     val left = duration - position
                     val credits = SkipSegments.creditsStart(skipSegments, duration)
@@ -6466,17 +6424,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         private var autoplayedInARow = 0
         private var lastInputAt = 0L
         private var openedByAutoplay = false
-
-        /**
-         * The sleep timer: when it runs out ([SystemClock.elapsedRealtime], zero for none), or
-         * whether it stops at the end of the video. Carried across autoplay for the same reason as
-         * the counts above, and dropped when the viewer opens a video themselves.
-         */
-        private var sleepAt = 0L
-        private var sleepAtTheEnd = false
-
-        /** The minutes the running timer was started with, for its tick in the sleep timer's sheet. */
-        private var sleepMinutes = 0
 
         /**
          * The lock read back off disk at startup, so it survives more than one process.
